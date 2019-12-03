@@ -15,12 +15,18 @@ fn main() -> Result<()> {
 fn part1(input: &str) -> Result<isize> {
     let mut data = input
         .split(",")
-        .map(|val| Ok(dbg!(val).parse()?))
+        .map(|val| Ok(val.parse()?))
         .collect::<Result<Vec<isize>>>()?;
 
     data[1] = 12;
     data[2] = 2;
 
+    run_with_input(data, 12, 2)
+}
+
+fn run_with_input(mut data: Vec<isize>, noun: isize, verb: isize) -> Result<isize> {
+    data[1] = noun;
+    data[2] = verb;
     run_program(data)
 }
 
@@ -40,15 +46,10 @@ fn run_program(mut data: Vec<isize>) -> Result<isize> {
             2 => val1 * val2,
             _ => Err(format!("Unknown opcode, {}", opcode))?,
         };
-        println!("Inserting {} into {}", result, register);
         data[register as usize] = result;
 
         pc += 4;
     }
-}
-
-fn part2(input: &str) -> Result<isize> {
-    Ok(0)
 }
 
 #[cfg(test)]
@@ -65,7 +66,18 @@ mod tests_part1 {
     }
 }
 
-#[cfg(test)]
-mod tests_part2 {
-    use super::*;
+fn part2(input: &str) -> Result<isize> {
+    let data = input
+        .split(",")
+        .map(|val| Ok(val.parse()?))
+        .collect::<Result<Vec<isize>>>()?;
+    for noun in 0..100 {
+        for verb in 0..100 {
+            if run_with_input(data.clone(), noun, verb)? == 19690720 {
+                return Ok(100 * noun + verb);
+            }
+        }
+    }
+
+    Err("Could not find a solution")?
 }
