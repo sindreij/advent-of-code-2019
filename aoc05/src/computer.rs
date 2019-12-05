@@ -32,7 +32,10 @@ impl Computer {
     }
 
     fn get(&self, pos: usize) -> Result<i32> {
-        Ok(*self.memory.get(pos).ok_or("Tried to read past memory")?)
+        Ok(*self
+            .memory
+            .get(pos)
+            .ok_or_else(|| format!("Tried to read past memory, at {}", pos))?)
     }
 
     fn set(&mut self, pos: usize, value: i32) -> Result<()> {
@@ -53,7 +56,6 @@ impl Computer {
     pub fn run(&mut self) -> Result<()> {
         loop {
             let instr = self.next_instr()?;
-
             use Instruction::*;
             match instr {
                 Add {
@@ -241,6 +243,16 @@ mod tests {
 
         assert_eq!(state.output, vec![10]);
 
+        Ok(())
+    }
+
+    #[test]
+    fn multiple_inputs_and_outputs() -> Result<()> {
+        let mut computer = Computer::from_mem(vec![3, 0, 3, 4, 99, 4, 0, 0, 4, 0, 4, 4, 99]);
+        computer.input(23);
+        computer.input(2);
+        computer.run()?;
+        assert_eq!(computer.output, vec![46, 2]);
         Ok(())
     }
 
