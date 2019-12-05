@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io::{self, Read};
 
 type Result<T> = ::std::result::Result<T, Box<dyn::std::error::Error>>;
@@ -63,14 +64,12 @@ fn parse_path(input: &str) -> Result<Vec<PathDesc>> {
 }
 
 fn find_overlapps(path1: Vec<(i32, i32)>, path2: Vec<(i32, i32)>) -> Vec<(i32, i32)> {
-    let mut result = vec![];
-    for point1 in &path1 {
-        for point2 in &path2 {
-            if point1 == point2 {
-                result.push(*point1);
-            }
-        }
-    }
+    let path1 = path1.into_iter().collect::<HashSet<_>>();
+    let path2 = path2.into_iter().collect::<HashSet<_>>();
+
+    let mut result = path1.intersection(&path2).copied().collect::<Vec<_>>();
+    // Make this easier to test (TODO: Test using sets)
+    result.sort();
     result
 }
 
@@ -93,7 +92,7 @@ fn part1(input: &str) -> Result<i32> {
 
     let a_path = get_path(parse_path(a)?);
     let b_path = get_path(parse_path(b)?);
-    let overlapps = dbg!(find_overlapps(a_path, b_path));
+    let overlapps = find_overlapps(a_path, b_path);
 
     Ok(manhattan_distance(find_closest(overlapps)?))
 }
