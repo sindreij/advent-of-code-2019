@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, Read};
 
 type Result<T> = ::std::result::Result<T, Box<dyn::std::error::Error>>;
@@ -49,7 +49,7 @@ fn get_path(desc: Vec<PathDesc>) -> Vec<(i32, i32)> {
 
 fn parse_path(input: &str) -> Result<Vec<PathDesc>> {
     input
-        .split(",")
+        .split(',')
         .map(|input| {
             let distance = input[1..].parse()?;
             match &input[0..1] {
@@ -63,11 +63,40 @@ fn parse_path(input: &str) -> Result<Vec<PathDesc>> {
         .collect()
 }
 
-fn find_overlapps(path1: Vec<(i32, i32)>, path2: Vec<(i32, i32)>) -> Vec<(i32, i32)> {
+fn find_overlaps(path1: Vec<(i32, i32)>, path2: Vec<(i32, i32)>) -> Vec<(i32, i32)> {
     let path1 = path1.into_iter().collect::<HashSet<_>>();
     let path2 = path2.into_iter().collect::<HashSet<_>>();
 
     let mut result = path1.intersection(&path2).copied().collect::<Vec<_>>();
+    // Make this easier to test (TODO: Test using sets)
+    result.sort();
+    result
+}
+
+fn find_overlaps_with_distance(
+    path1: Vec<(i32, i32)>,
+    path2: Vec<(i32, i32)>,
+) -> Vec<(usize, (i32, i32))> {
+    let path1_set = path1.iter().copied().collect::<HashSet<_>>();
+    let path2_set = path2.iter().copied().collect::<HashSet<_>>();
+
+    let mut path1_distances = HashMap::new();
+
+    for (dist, point) in path1.iter().enumerate() {
+        path1_distances.entry(point).or_insert(dist + 1);
+    }
+
+    let mut path2_distances = HashMap::new();
+
+    for (dist, point) in path2.iter().enumerate() {
+        path2_distances.entry(point).or_insert(dist + 1);
+    }
+
+    let mut result = path1_set
+        .intersection(&path2_set)
+        .copied()
+        .map(|point| (path1_distances[&point] + path2_distances[&point], point))
+        .collect::<Vec<_>>();
     // Make this easier to test (TODO: Test using sets)
     result.sort();
     result
@@ -86,15 +115,31 @@ fn find_closest(points: Vec<(i32, i32)>) -> Result<(i32, i32)> {
 }
 
 fn part1(input: &str) -> Result<i32> {
-    let parts = input.split("\n").collect::<Vec<_>>();
+    let parts = input.split('\n').collect::<Vec<_>>();
     let a = parts[0];
     let b = parts[1];
 
     let a_path = get_path(parse_path(a)?);
     let b_path = get_path(parse_path(b)?);
-    let overlapps = find_overlapps(a_path, b_path);
+    let overlapps = find_overlaps(a_path, b_path);
 
     Ok(manhattan_distance(find_closest(overlapps)?))
+}
+
+fn part2(input: &str) -> Result<usize> {
+    let parts = input.split('\n').collect::<Vec<_>>();
+    let a = parts[0];
+    let b = parts[1];
+
+    let a_path = get_path(parse_path(a)?);
+    let b_path = get_path(parse_path(b)?);
+    let min_distance = find_overlaps_with_distance(a_path, b_path)
+        .into_iter()
+        .map(|(dist, _)| dist)
+        .min()
+        .ok_or("No points")?;
+
+    Ok(min_distance)
 }
 
 #[cfg(test)]
@@ -127,20 +172,44 @@ mod tests {
     }
 
     #[test]
-    fn test_find_overlapps() {
-        assert_eq!(find_overlapps(vec![(0, 1)], vec![(0, 1)]), vec![(0, 1)]);
-        assert_eq!(find_overlapps(vec![(0, 1)], vec![(0, 2)]), vec![]);
+    fn test_find_overlaps() {
+        assert_eq!(find_overlaps(vec![(0, 1)], vec![(0, 1)]), vec![(0, 1)]);
+        assert_eq!(find_overlaps(vec![(0, 1)], vec![(0, 2)]), vec![]);
         assert_eq!(
-            find_overlapps(vec![(1, 0), (0, 4)], vec![(0, 2), (0, 3), (0, 4)]),
+            find_overlaps(vec![(1, 0), (0, 4)], vec![(0, 2), (0, 3), (0, 4)]),
             vec![(0, 4)]
         );
 
         assert_eq!(
-            find_overlapps(
+            find_overlaps(
                 vec![(1, 0), (0, 4), (0, 9), (1, 7)],
                 vec![(0, 2), (0, 3), (0, 4), (1, 7), (1, 10)]
             ),
             vec![(0, 4), (1, 7)]
+        );
+    }
+
+    #[test]
+    fn test_find_overlaps_with_distance() {
+        assert_eq!(
+            find_overlaps_with_distance(vec![(0, 1)], vec![(0, 1)]),
+            vec![(2, (0, 1))]
+        );
+        assert_eq!(
+            find_overlaps_with_distance(vec![(0, 1)], vec![(0, 2)]),
+            vec![]
+        );
+        assert_eq!(
+            find_overlaps_with_distance(vec![(1, 0), (0, 4)], vec![(0, 2), (0, 3), (0, 4)]),
+            vec![(2 + 3, (0, 4))]
+        );
+
+        assert_eq!(
+            find_overlaps_with_distance(
+                vec![(1, 0), (0, 4), (0, 9), (1, 7)],
+                vec![(0, 2), (0, 3), (0, 4), (1, 7), (1, 10)]
+            ),
+            vec![(2 + 3, (0, 4)), (4 + 4, (1, 7))]
         );
     }
 
@@ -184,8 +253,4 @@ mod tests {
             vec![(1, 0), (2, 0), (2, 1), (2, 2), (2, 3)]
         );
     }
-}
-
-fn part2(input: &str) -> Result<isize> {
-    Ok(0)
 }
