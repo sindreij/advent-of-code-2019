@@ -63,9 +63,19 @@ impl Computer {
                 } => {
                     self.set(result_location, self.get_param(a)? + self.get_param(b)?)?;
                 }
+                Multiply {
+                    a,
+                    b,
+                    result_location,
+                } => {
+                    self.set(result_location, self.get_param(a)? * self.get_param(b)?)?;
+                }
+                Input { result_location } => {
+                    let value = self.input.pop_front().ok_or("Nothing in input queue")?;
+                    self.set(result_location, value)?;
+                }
                 Output { param } => self.output.push(self.get_param(param)?),
                 Halt => return Ok(()),
-                value => unimplemented!("{:?}", value),
             }
         }
     }
@@ -82,6 +92,14 @@ impl Computer {
             1 => Instruction::Add {
                 a: Param::Pos(self.next_i32()? as usize),
                 b: Param::Pos(self.next_i32()? as usize),
+                result_location: self.next_i32()? as usize,
+            },
+            2 => Instruction::Multiply {
+                a: Param::Pos(self.next_i32()? as usize),
+                b: Param::Pos(self.next_i32()? as usize),
+                result_location: self.next_i32()? as usize,
+            },
+            3 => Instruction::Input {
                 result_location: self.next_i32()? as usize,
             },
             4 => Instruction::Output {
@@ -147,7 +165,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn input_output_program() -> Result<()> {
         let program = vec![3, 0, 4, 0, 99];
         let mut computer = Computer::from_mem(program.clone());
@@ -213,6 +230,35 @@ mod tests {
 
         assert_eq!(state.output, vec![2]);
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_multiply() -> Result<()> {
+        let program = vec![2, 7, 8, 0, 4, 0, 99, 5, 2];
+        let mut state = Computer::from_mem(program.clone());
+        state.run()?;
+
+        assert_eq!(state.output, vec![10]);
+
+        Ok(())
+    }
+
+    fn finish(program: Vec<i32>) -> Result<Vec<i32>> {
+        let mut computer = Computer::from_mem(program);
+        computer.run()?;
+        Ok(computer.memory)
+    }
+
+    #[test]
+    fn test_from_day2() -> Result<()> {
+        assert_eq!(finish(vec![1, 0, 0, 0, 99])?, vec![2, 0, 0, 0, 99]);
+        assert_eq!(finish(vec![2, 3, 0, 3, 99])?, vec![2, 3, 0, 6, 99]);
+        assert_eq!(finish(vec![2, 4, 4, 5, 99, 0])?, vec![2, 4, 4, 5, 99, 9801]);
+        assert_eq!(
+            finish(vec![1, 1, 1, 4, 99, 5, 6, 0, 99])?,
+            vec![30, 1, 1, 4, 2, 5, 6, 0, 99]
+        );
         Ok(())
     }
 }
