@@ -25,6 +25,7 @@ fn parse_program(program: &str) -> Result<Vec<i32>> {
 
 fn part1(input: &str) -> Result<i32> {
     let mut computer = Computer::from_mem(parse_program(input)?);
+    computer.input(1);
     computer.run()?;
     Ok(12)
 }

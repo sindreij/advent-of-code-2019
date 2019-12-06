@@ -89,23 +89,30 @@ impl Computer {
     }
 
     fn next_instr(&mut self) -> Result<Instruction> {
-        let op = self.next_i32()?;
+        let mut full_op = self.next_i32()?;
+        let op = full_op % 100;
+        full_op /= 100;
+        let mut modes = Vec::new();
+        while full_op > 0 {
+            modes.push(full_op % 10);
+            full_op /= 10;
+        }
         Ok(match op {
             1 => Instruction::Add {
-                a: Param::Pos(self.next_i32()? as usize),
-                b: Param::Pos(self.next_i32()? as usize),
+                a: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i32()?)?,
+                b: Param::from_mode(modes.get(1).copied().unwrap_or(0), self.next_i32()?)?,
                 result_location: self.next_i32()? as usize,
             },
             2 => Instruction::Multiply {
-                a: Param::Pos(self.next_i32()? as usize),
-                b: Param::Pos(self.next_i32()? as usize),
+                a: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i32()?)?,
+                b: Param::from_mode(modes.get(1).copied().unwrap_or(0), self.next_i32()?)?,
                 result_location: self.next_i32()? as usize,
             },
             3 => Instruction::Input {
                 result_location: self.next_i32()? as usize,
             },
             4 => Instruction::Output {
-                param: Param::Pos(self.next_i32()? as usize),
+                param: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i32()?)?,
             },
             99 => Instruction::Halt,
             unknown => Err(format!("Unknown instruction {}", unknown))?,
@@ -117,6 +124,16 @@ impl Computer {
 enum Param {
     Pos(usize),
     Immediate(i32),
+}
+
+impl Param {
+    fn from_mode(mode: i32, value: i32) -> Result<Param> {
+        Ok(match mode {
+            0 => Param::Pos(value as usize),
+            1 => Param::Immediate(value),
+            mode => Err(format!("Unknown mode {}", mode))?,
+        })
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -218,6 +235,29 @@ mod tests {
     }
 
     #[test]
+    fn test_next_instr_imm() -> Result<()> {
+        let mut program = Computer::from_mem(vec![1002, 4, 3, 4, 1102, 10, 8, 7, 99]);
+        assert_eq!(
+            program.next_instr()?,
+            Instruction::Multiply {
+                a: Param::Pos(4),
+                b: Param::Immediate(3),
+                result_location: 4
+            }
+        );
+        assert_eq!(
+            program.next_instr()?,
+            Instruction::Multiply {
+                a: Param::Immediate(10),
+                b: Param::Immediate(8),
+                result_location: 7
+            }
+        );
+        assert_eq!(program.next_instr()?, Instruction::Halt,);
+        Ok(())
+    }
+
+    #[test]
     fn just_halt() -> Result<()> {
         let mut comp = Computer::from_mem(vec![99]);
         comp.run()?;
@@ -271,6 +311,13 @@ mod tests {
             finish(vec![1, 1, 1, 4, 99, 5, 6, 0, 99])?,
             vec![30, 1, 1, 4, 2, 5, 6, 0, 99]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn programs_with_immediate() -> Result<()> {
+        assert_eq!(finish(vec![1101, 5, 6, 0, 99])?, vec![11, 5, 6, 0, 99]);
+        assert_eq!(finish(vec![1102, 4, 2, 3, 99])?, vec![1102, 4, 2, 8, 99]);
         Ok(())
     }
 }
