@@ -31,6 +31,10 @@ impl Computer {
         self.input.push_back(data);
     }
 
+    pub fn output(&self) -> &[i32] {
+        &self.output
+    }
+
     fn get(&self, pos: usize) -> Result<i32> {
         Ok(*self
             .memory

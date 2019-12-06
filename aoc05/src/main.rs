@@ -19,7 +19,8 @@ fn main() -> Result<()> {
 fn parse_program(program: &str) -> Result<Vec<i32>> {
     Ok(program
         .split(",")
-        .map(|val| Ok(val.parse()?))
+        .filter(|s| !s.is_empty())
+        .map(|val| Ok(val.trim().parse()?))
         .collect::<Result<Vec<i32>>>()?)
 }
 
@@ -27,7 +28,14 @@ fn part1(input: &str) -> Result<i32> {
     let mut computer = Computer::from_mem(parse_program(input)?);
     computer.input(1);
     computer.run()?;
-    Ok(12)
+    for out in computer.output() {
+        println!("{}", out);
+    }
+    Ok(computer
+        .output()
+        .last()
+        .copied()
+        .ok_or("No Output from program")?)
 }
 
 fn part2(input: &str) -> Result<i32> {
