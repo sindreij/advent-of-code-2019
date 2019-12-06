@@ -96,6 +96,11 @@ impl Computer {
                         self.pc = self.get_param(jump_to)? as usize;
                     }
                 }
+                JumpIfFalse { check, jump_to } => {
+                    if self.get_param(check)? == 0 {
+                        self.pc = self.get_param(jump_to)? as usize;
+                    }
+                }
                 LessThan {
                     a,
                     b,
@@ -121,7 +126,7 @@ impl Computer {
                     self.set(result_location, value)?;
                 }
                 Halt => return Ok(()),
-                unknown => unimplemented!("{:?}", unknown),
+                // unknown => unimplemented!("{:?}", unknown),
             }
         }
     }
@@ -486,21 +491,21 @@ mod tests {
         Ok(computer.output().get(0).copied().ok_or("No output")?)
     }
 
-    fn input_output(program: Vec<i32>, input: i32) -> Result<i32> {
-        let mut computer = Computer::from_mem(program);
+    fn input_output(program: &[i32], input: i32) -> Result<i32> {
+        let mut computer = Computer::from_mem(program.to_vec());
         computer.input(input);
         computer.run()?;
         Ok(computer.output().get(0).copied().ok_or("No output")?)
     }
 
-    fn print_program(program: Vec<i32>) {
+    fn print_program(program: &[i32]) {
         println!("---");
-        Computer::from_mem(program).debug();
+        Computer::from_mem(program.to_vec()).debug();
         println!("---");
     }
 
     #[test]
-    fn day5_part2_test_programs() -> Result<()> {
+    fn day5_part2_instructions() -> Result<()> {
         // Test EQUALS
         assert_eq!(finish(vec![1108, 8, 2, 0, 99])?, vec![0, 8, 2, 0, 99]);
         assert_eq!(
@@ -521,6 +526,68 @@ mod tests {
         // Test JUMP IF TRUE
         assert_eq!(get_output(vec![1105, 0, 6, 104, 8, 99, 104, 16, 99])?, 8);
         assert_eq!(get_output(vec![1105, 1, 6, 104, 8, 99, 104, 16, 99])?, 16);
+
+        assert_eq!(
+            get_output(vec![5, 9, 10, 104, 8, 99, 104, 16, 99, 0, 6])?,
+            8
+        );
+        assert_eq!(
+            get_output(vec![5, 9, 10, 104, 8, 99, 104, 16, 99, 15, 6])?,
+            16
+        );
+
+        // Test JUMP IF FALSE
+        assert_eq!(get_output(vec![1106, 1, 6, 104, 8, 99, 104, 16, 99])?, 8);
+        assert_eq!(get_output(vec![1106, 0, 6, 104, 8, 99, 104, 16, 99])?, 16);
+
+        assert_eq!(
+            get_output(vec![6, 9, 10, 104, 8, 99, 104, 16, 99, 82, 6])?,
+            8
+        );
+        assert_eq!(
+            get_output(vec![6, 9, 10, 104, 8, 99, 104, 16, 99, 0, 6])?,
+            16
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn day5_part2_test_programs() -> Result<()> {
+        let is_eight = vec![3, 9, 8, 9, 10, 9, 4, 9, 99, -1, 8];
+        assert_eq!(input_output(&is_eight, 8)?, 1);
+        assert_eq!(input_output(&is_eight, 9)?, 0);
+
+        let less_than_eight = vec![3, 9, 7, 9, 10, 9, 4, 9, 99, -1, 8];
+        assert_eq!(input_output(&less_than_eight, 8)?, 0);
+        assert_eq!(input_output(&less_than_eight, 4)?, 1);
+
+        let is_eight_imm = vec![3, 3, 1108, -1, 8, 3, 4, 3, 99];
+        assert_eq!(input_output(&is_eight_imm, 8)?, 1);
+        assert_eq!(input_output(&is_eight_imm, 9)?, 0);
+
+        let less_than_eight_imm = vec![3, 3, 1107, -1, 8, 3, 4, 3, 99];
+        assert_eq!(input_output(&less_than_eight_imm, 8)?, 0);
+        assert_eq!(input_output(&less_than_eight_imm, 4)?, 1);
+
+        let is_non_zero = vec![3, 12, 6, 12, 15, 1, 13, 14, 13, 4, 13, 99, -1, 0, 1, 9];
+        assert_eq!(input_output(&is_non_zero, 0)?, 0);
+        assert_eq!(input_output(&is_non_zero, 14)?, 1);
+        assert_eq!(input_output(&is_non_zero, 1)?, 1);
+
+        let is_non_zero_imm = vec![3, 3, 1105, -1, 9, 1101, 0, 0, 12, 4, 12, 99, 1];
+        assert_eq!(input_output(&is_non_zero_imm, 0)?, 0);
+        assert_eq!(input_output(&is_non_zero_imm, 14)?, 1);
+        assert_eq!(input_output(&is_non_zero_imm, 1)?, 1);
+
+        let larger_example = vec![
+            3, 21, 1008, 21, 8, 20, 1005, 20, 22, 107, 8, 21, 20, 1006, 20, 31, 1106, 0, 36, 98, 0,
+            0, 1002, 21, 125, 20, 4, 20, 1105, 1, 46, 104, 999, 1105, 1, 46, 1101, 1000, 1, 20, 4,
+            20, 1105, 1, 46, 98, 99,
+        ];
+        assert_eq!(input_output(&larger_example, 7)?, 999);
+        assert_eq!(input_output(&larger_example, 8)?, 1000);
+        assert_eq!(input_output(&larger_example, 9)?, 1001);
+
         Ok(())
     }
 }

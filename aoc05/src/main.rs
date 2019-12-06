@@ -39,5 +39,15 @@ fn part1(input: &str) -> Result<i32> {
 }
 
 fn part2(input: &str) -> Result<i32> {
-    Ok(12)
+    let mut computer = Computer::from_mem(parse_program(input)?);
+    computer.input(5);
+    computer.run()?;
+    for out in computer.output() {
+        println!("{}", out);
+    }
+    Ok(computer
+        .output()
+        .last()
+        .copied()
+        .ok_or("No Output from program")?)
 }
