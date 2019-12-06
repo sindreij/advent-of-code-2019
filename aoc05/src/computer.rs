@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::fmt::{self, Display};
 
 // Opcodes
 // 01 ADD op1 op2 addr
@@ -9,6 +10,7 @@ use std::collections::VecDeque;
 
 type Result<T> = ::std::result::Result<T, Box<dyn::std::error::Error>>;
 
+#[derive(Debug, Clone)]
 pub struct Computer {
     memory: Vec<i32>,
     // instruction pointer, or program counter
@@ -33,6 +35,13 @@ impl Computer {
 
     pub fn output(&self) -> &[i32] {
         &self.output
+    }
+
+    pub fn debug(&self) {
+        let mut debugger = self.clone();
+        while let Ok(instr) = debugger.next_instr() {
+            println!("{}", instr);
+        }
     }
 
     fn get(&self, pos: usize) -> Result<i32> {
@@ -60,6 +69,7 @@ impl Computer {
     pub fn run(&mut self) -> Result<()> {
         loop {
             let instr = self.next_instr()?;
+            // println!("{}", instr);
             use Instruction::*;
             match instr {
                 Add {
@@ -81,7 +91,37 @@ impl Computer {
                     self.set(result_location, value)?;
                 }
                 Output { param } => self.output.push(self.get_param(param)?),
+                JumpIfTrue { check, jump_to } => {
+                    if self.get_param(check)? > 0 {
+                        self.pc = self.get_param(jump_to)? as usize;
+                    }
+                }
+                LessThan {
+                    a,
+                    b,
+                    result_location,
+                } => {
+                    let value = if self.get_param(a)? < self.get_param(b)? {
+                        1
+                    } else {
+                        0
+                    };
+                    self.set(result_location, value)?;
+                }
+                Equals {
+                    a,
+                    b,
+                    result_location,
+                } => {
+                    let value = if self.get_param(a)? == self.get_param(b)? {
+                        1
+                    } else {
+                        0
+                    };
+                    self.set(result_location, value)?;
+                }
                 Halt => return Ok(()),
+                unknown => unimplemented!("{:?}", unknown),
             }
         }
     }
@@ -117,6 +157,24 @@ impl Computer {
             },
             4 => Instruction::Output {
                 param: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i32()?)?,
+            },
+            5 => Instruction::JumpIfTrue {
+                check: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i32()?)?,
+                jump_to: Param::from_mode(modes.get(1).copied().unwrap_or(0), self.next_i32()?)?,
+            },
+            6 => Instruction::JumpIfFalse {
+                check: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i32()?)?,
+                jump_to: Param::from_mode(modes.get(1).copied().unwrap_or(0), self.next_i32()?)?,
+            },
+            7 => Instruction::LessThan {
+                a: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i32()?)?,
+                b: Param::from_mode(modes.get(1).copied().unwrap_or(0), self.next_i32()?)?,
+                result_location: self.next_i32()? as usize,
+            },
+            8 => Instruction::Equals {
+                a: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i32()?)?,
+                b: Param::from_mode(modes.get(1).copied().unwrap_or(0), self.next_i32()?)?,
+                result_location: self.next_i32()? as usize,
             },
             99 => Instruction::Halt,
             unknown => Err(format!("Unknown instruction {}", unknown))?,
@@ -158,7 +216,68 @@ enum Instruction {
     Output {
         param: Param,
     },
+    JumpIfTrue {
+        check: Param,
+        jump_to: Param,
+    },
+    JumpIfFalse {
+        check: Param,
+        jump_to: Param,
+    },
+    LessThan {
+        a: Param,
+        b: Param,
+        result_location: usize,
+    },
+    Equals {
+        a: Param,
+        b: Param,
+        result_location: usize,
+    },
     Halt,
+}
+
+impl Display for Instruction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use Instruction::*;
+        match self {
+            Add {
+                a,
+                b,
+                result_location,
+            } => write!(f, "ADD {} {} => &{}", a, b, result_location),
+            Multiply {
+                a,
+                b,
+                result_location,
+            } => write!(f, "MUL {} {} => &{}", a, b, result_location),
+            Input { result_location } => write!(f, "INPUT &{}", result_location),
+            Output { param } => write!(f, "OUTPUT {}", param),
+            JumpIfTrue { check, jump_to } => write!(f, "IF {} JUMP TO {}", check, jump_to),
+            JumpIfFalse { check, jump_to } => write!(f, "IF NOT {} JUMP TO {}", check, jump_to),
+            LessThan {
+                a,
+                b,
+                result_location,
+            } => write!(f, "IF {} < {} => {}", a, b, result_location),
+            Equals {
+                a,
+                b,
+                result_location,
+            } => write!(f, "IF {} == {} => {}", a, b, result_location),
+            Halt => write!(f, "HALT"),
+        }
+    }
+}
+
+impl Display for Param {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use Param::*;
+        match self {
+            Pos(value) => write!(f, "&{}", value),
+            Immediate(value) => write!(f, "{}", value),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -235,6 +354,42 @@ mod tests {
             }
         );
         assert_eq!(program.next_instr()?, Instruction::Halt,);
+        Ok(())
+    }
+
+    #[test]
+    fn test_more_instructions() -> Result<()> {
+        let mut program = Computer::from_mem(vec![5, 1, 2, 6, 3, 4, 7, 5, 6, 3, 8, 4, 3, 9]);
+        assert_eq!(
+            program.next_instr()?,
+            Instruction::JumpIfTrue {
+                check: Param::Pos(1),
+                jump_to: Param::Pos(2),
+            }
+        );
+        assert_eq!(
+            program.next_instr()?,
+            Instruction::JumpIfFalse {
+                check: Param::Pos(3),
+                jump_to: Param::Pos(4),
+            }
+        );
+        assert_eq!(
+            program.next_instr()?,
+            Instruction::LessThan {
+                a: Param::Pos(5),
+                b: Param::Pos(6),
+                result_location: 3
+            }
+        );
+        assert_eq!(
+            program.next_instr()?,
+            Instruction::Equals {
+                a: Param::Pos(4),
+                b: Param::Pos(3),
+                result_location: 9
+            }
+        );
         Ok(())
     }
 
@@ -322,6 +477,50 @@ mod tests {
     fn programs_with_immediate() -> Result<()> {
         assert_eq!(finish(vec![1101, 5, 6, 0, 99])?, vec![11, 5, 6, 0, 99]);
         assert_eq!(finish(vec![1102, 4, 2, 3, 99])?, vec![1102, 4, 2, 8, 99]);
+        Ok(())
+    }
+
+    fn get_output(program: Vec<i32>) -> Result<i32> {
+        let mut computer = Computer::from_mem(program);
+        computer.run()?;
+        Ok(computer.output().get(0).copied().ok_or("No output")?)
+    }
+
+    fn input_output(program: Vec<i32>, input: i32) -> Result<i32> {
+        let mut computer = Computer::from_mem(program);
+        computer.input(input);
+        computer.run()?;
+        Ok(computer.output().get(0).copied().ok_or("No output")?)
+    }
+
+    fn print_program(program: Vec<i32>) {
+        println!("---");
+        Computer::from_mem(program).debug();
+        println!("---");
+    }
+
+    #[test]
+    fn day5_part2_test_programs() -> Result<()> {
+        // Test EQUALS
+        assert_eq!(finish(vec![1108, 8, 2, 0, 99])?, vec![0, 8, 2, 0, 99]);
+        assert_eq!(
+            finish(vec![8, 5, 6, 0, 99, 2, 2])?,
+            vec![1, 5, 6, 0, 99, 2, 2]
+        );
+        assert_eq!(finish(vec![1108, 8, 8, 0, 99])?, vec![1, 8, 8, 0, 99]);
+        assert_eq!(
+            finish(vec![8, 5, 6, 0, 99, 2, 3])?,
+            vec![0, 5, 6, 0, 99, 2, 3]
+        );
+        // Test LESS THAN
+        assert_eq!(finish(vec![1107, 8, 2, 0, 99])?, vec![0, 8, 2, 0, 99]);
+        assert_eq!(get_output(vec![7, 7, 8, 0, 4, 0, 99, 4, 2])?, 0);
+        assert_eq!(finish(vec![1107, 8, 9, 0, 99])?, vec![1, 8, 9, 0, 99]);
+        assert_eq!(get_output(vec![7, 7, 8, 0, 4, 0, 99, 4, 9])?, 1);
+
+        // Test JUMP IF TRUE
+        assert_eq!(get_output(vec![1105, 0, 6, 104, 8, 99, 104, 16, 99])?, 8);
+        assert_eq!(get_output(vec![1105, 1, 6, 104, 8, 99, 104, 16, 99])?, 16);
         Ok(())
     }
 }

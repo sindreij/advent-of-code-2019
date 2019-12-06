@@ -1,0 +1,10 @@
+# Opcodes
+01 ADD op1 op2 addr
+02 MULTIPLY op1 op2 addr
+03 INPUT addr
+04 OUTPUT addr
+05 JUMP IF TRUE check addr
+06 JUMP IF FALSE check addr
+07 LESS THAN op1 op2 addr
+08 EQUALS op1 op2 addr
+99 HALT
