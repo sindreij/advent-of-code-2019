@@ -12,3 +12,5 @@ fi
 name="$(printf "aoc%02d" "$1")"
 cargo new --bin "$name"
 mkdir "$name/input"
+cd "$name"
+cargo add anyhow
