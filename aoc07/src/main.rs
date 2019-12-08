@@ -56,6 +56,43 @@ async fn get_thruster_signal(program: Vec<i32>, settings: &[i32]) -> Result<i32>
         .ok_or(anyhow!("Could not get output"))?)
 }
 
+async fn get_thruster_signal_feedback(program: Vec<i32>, settings: &[i32]) -> Result<i32> {
+    let (start_sender, start_receiver) = channel(10);
+    let mut last_sender = start_sender.clone();
+    let mut last_receiver = start_receiver.clone();
+
+    let mut computers = Vec::new();
+
+    for phase in settings {
+        last_sender.send(*phase).await;
+        let mut computer = Computer::from_mem(program.clone());
+
+        let (sender, receiver) = channel(10);
+
+        computer.connect_input(last_receiver.clone());
+        computer.connect_output(sender.clone());
+        last_sender = sender;
+        last_receiver = receiver;
+        computers.push(computer);
+    }
+
+    computers
+        .last_mut()
+        .unwrap()
+        .connect_output(start_sender.clone());
+
+    let tasks = join_all(computers.into_iter().map(|computer| computer.spawn())).await;
+
+    start_sender.send(0).await;
+
+    join_all(tasks).await;
+
+    Ok(start_receiver
+        .recv()
+        .await
+        .ok_or(anyhow!("Could not get output"))?)
+}
+
 async fn max_thruster_signal(program: Vec<i32>) -> Result<i32> {
     let values = join_all((0..5).permutations(5).map(|settings| {
         let program = program.clone();
@@ -69,14 +106,27 @@ async fn max_thruster_signal(program: Vec<i32>) -> Result<i32> {
         .into_iter()
         .max()
         .unwrap())
+}
 
-    // Ok(
-    //     .max()
-    //     .unwrap())
+async fn max_thruster_signal_feedback(program: Vec<i32>) -> Result<i32> {
+    let values = join_all((5..=9).permutations(5).map(|settings| {
+        let program = program.clone();
+        task::spawn(async move { get_thruster_signal_feedback(program, &settings).await })
+    }))
+    .await;
+
+    Ok(values
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .max()
+        .unwrap())
 }
 
 fn part2(input: &str) -> Result<i32> {
-    Ok(-1)
+    Ok(task::block_on(max_thruster_signal_feedback(
+        parse_program(input)?,
+    ))?)
 }
 
 #[cfg(test)]
@@ -119,6 +169,34 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn test_get_thruster_signal_feedback() -> Result<()> {
+        assert_eq!(
+            get_thruster_signal_feedback(
+                vec![
+                    3, 26, 1001, 26, -4, 26, 3, 27, 1002, 27, 2, 27, 1, 27, 26, 27, 4, 27, 1001,
+                    28, -1, 28, 1005, 28, 6, 99, 0, 0, 5
+                ],
+                &[9, 8, 7, 6, 5]
+            )
+            .await?,
+            139629729
+        );
+        assert_eq!(
+            get_thruster_signal_feedback(
+                vec![
+                    3, 52, 1001, 52, -5, 52, 3, 53, 1, 52, 56, 54, 1007, 54, 5, 55, 1005, 55, 26,
+                    1001, 54, -5, 54, 1105, 1, 12, 1, 53, 54, 53, 1008, 54, 0, 55, 1001, 55, 1, 55,
+                    2, 53, 55, 53, 4, 53, 1001, 56, -1, 56, 1005, 56, 6, 99, 0, 0, 0, 0, 10
+                ],
+                &[9, 7, 8, 5, 6]
+            )
+            .await?,
+            18216
+        );
+        Ok(())
+    }
+
+    #[async_std::test]
     async fn test_max_thruster_signal() -> Result<()> {
         assert_eq!(
             max_thruster_signal(vec![
@@ -142,6 +220,29 @@ mod tests {
             ])
             .await?,
             65210
+        );
+
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn test_max_thruster_signal_feedback() -> Result<()> {
+        assert_eq!(
+            max_thruster_signal_feedback(vec![
+                3, 26, 1001, 26, -4, 26, 3, 27, 1002, 27, 2, 27, 1, 27, 26, 27, 4, 27, 1001, 28,
+                -1, 28, 1005, 28, 6, 99, 0, 0, 5
+            ])
+            .await?,
+            139629729
+        );
+        assert_eq!(
+            max_thruster_signal_feedback(vec![
+                3, 52, 1001, 52, -5, 52, 3, 53, 1, 52, 56, 54, 1007, 54, 5, 55, 1005, 55, 26, 1001,
+                54, -5, 54, 1105, 1, 12, 1, 53, 54, 53, 1008, 54, 0, 55, 1001, 55, 1, 55, 2, 53,
+                55, 53, 4, 53, 1001, 56, -1, 56, 1005, 56, 6, 99, 0, 0, 0, 0, 10
+            ])
+            .await?,
+            18216
         );
 
         Ok(())
