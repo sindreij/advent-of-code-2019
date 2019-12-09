@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use async_std::{
     sync::{channel, Receiver, Sender},
     task,
@@ -89,6 +89,14 @@ impl Computer {
         })
     }
 
+    fn set_param(&mut self, param: Param, value: i64) -> Result<()> {
+        Ok(match param {
+            Param::Pos(pos) => self.set(pos, value)?,
+            Param::Immediate(_) => bail!("Cannot set a immidiate value"),
+            Param::Relative(rel) => self.set((self.relative_base + rel) as usize, value)?,
+        })
+    }
+
     pub async fn spawn(mut self) -> task::JoinHandle<Result<()>> {
         task::spawn(async move {
             let result = self.run().await;
@@ -110,14 +118,14 @@ impl Computer {
                     b,
                     result_location,
                 } => {
-                    self.set(result_location, self.get_param(a)? + self.get_param(b)?)?;
+                    self.set_param(result_location, self.get_param(a)? + self.get_param(b)?)?;
                 }
                 Multiply {
                     a,
                     b,
                     result_location,
                 } => {
-                    self.set(result_location, self.get_param(a)? * self.get_param(b)?)?;
+                    self.set_param(result_location, self.get_param(a)? * self.get_param(b)?)?;
                 }
                 Input { result_location } => match &self.input {
                     None => Err(anyhow!("Tried to read from unconnected input"))?,
@@ -126,7 +134,7 @@ impl Computer {
                             .recv()
                             .await
                             .ok_or(anyhow!("Input sender-end dropped"))?;
-                        self.set(result_location, value)?;
+                        self.set_param(result_location, value)?;
                     }
                 },
                 Output { param } => match &self.output {
@@ -153,7 +161,7 @@ impl Computer {
                     } else {
                         0
                     };
-                    self.set(result_location, value)?;
+                    self.set_param(result_location, value)?;
                 }
                 Equals {
                     a,
@@ -165,7 +173,7 @@ impl Computer {
                     } else {
                         0
                     };
-                    self.set(result_location, value)?;
+                    self.set_param(result_location, value)?;
                 }
                 AdjustRelativeBase { value } => {
                     let value = self.get_param(value)?;
@@ -196,15 +204,24 @@ impl Computer {
             1 => Instruction::Add {
                 a: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i64()?)?,
                 b: Param::from_mode(modes.get(1).copied().unwrap_or(0), self.next_i64()?)?,
-                result_location: self.next_i64()? as usize,
+                result_location: Param::from_mode(
+                    modes.get(2).copied().unwrap_or(0),
+                    self.next_i64()?,
+                )?,
             },
             2 => Instruction::Multiply {
                 a: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i64()?)?,
                 b: Param::from_mode(modes.get(1).copied().unwrap_or(0), self.next_i64()?)?,
-                result_location: self.next_i64()? as usize,
+                result_location: Param::from_mode(
+                    modes.get(2).copied().unwrap_or(0),
+                    self.next_i64()?,
+                )?,
             },
             3 => Instruction::Input {
-                result_location: self.next_i64()? as usize,
+                result_location: Param::from_mode(
+                    modes.get(0).copied().unwrap_or(0),
+                    self.next_i64()?,
+                )?,
             },
             4 => Instruction::Output {
                 param: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i64()?)?,
@@ -220,12 +237,18 @@ impl Computer {
             7 => Instruction::LessThan {
                 a: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i64()?)?,
                 b: Param::from_mode(modes.get(1).copied().unwrap_or(0), self.next_i64()?)?,
-                result_location: self.next_i64()? as usize,
+                result_location: Param::from_mode(
+                    modes.get(2).copied().unwrap_or(0),
+                    self.next_i64()?,
+                )?,
             },
             8 => Instruction::Equals {
                 a: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i64()?)?,
                 b: Param::from_mode(modes.get(1).copied().unwrap_or(0), self.next_i64()?)?,
-                result_location: self.next_i64()? as usize,
+                result_location: Param::from_mode(
+                    modes.get(2).copied().unwrap_or(0),
+                    self.next_i64()?,
+                )?,
             },
             9 => Instruction::AdjustRelativeBase {
                 value: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i64()?)?,
@@ -259,15 +282,15 @@ enum Instruction {
     Add {
         a: Param,
         b: Param,
-        result_location: usize,
+        result_location: Param,
     },
     Multiply {
         a: Param,
         b: Param,
-        result_location: usize,
+        result_location: Param,
     },
     Input {
-        result_location: usize,
+        result_location: Param,
     },
     Output {
         param: Param,
@@ -283,12 +306,12 @@ enum Instruction {
     LessThan {
         a: Param,
         b: Param,
-        result_location: usize,
+        result_location: Param,
     },
     Equals {
         a: Param,
         b: Param,
-        result_location: usize,
+        result_location: Param,
     },
     AdjustRelativeBase {
         value: Param,
@@ -404,6 +427,8 @@ mod tests {
     fn test_relative_mode() -> Result<()> {
         assert_eq!(get_output(vec![109, 1, 204, -1, 99])?, 109);
 
+        assert_eq!(input_output(&[109, 15, 203, 1, 4, 16, 99], 42)?, 42);
+
         Ok(())
     }
 
@@ -463,7 +488,7 @@ mod tests {
             Instruction::Add {
                 a: Param::Pos(0),
                 b: Param::Pos(2),
-                result_location: 3
+                result_location: Param::Pos(3)
             }
         );
         assert_eq!(
@@ -471,7 +496,7 @@ mod tests {
             Instruction::Add {
                 a: Param::Pos(4),
                 b: Param::Pos(8),
-                result_location: 5
+                result_location: Param::Pos(5)
             }
         );
         assert_eq!(
@@ -506,7 +531,7 @@ mod tests {
             Instruction::LessThan {
                 a: Param::Pos(5),
                 b: Param::Pos(6),
-                result_location: 3
+                result_location: Param::Pos(3)
             }
         );
         assert_eq!(
@@ -514,7 +539,7 @@ mod tests {
             Instruction::Equals {
                 a: Param::Pos(4),
                 b: Param::Pos(3),
-                result_location: 9
+                result_location: Param::Pos(9)
             }
         );
         Ok(())
@@ -528,7 +553,7 @@ mod tests {
             Instruction::Multiply {
                 a: Param::Pos(4),
                 b: Param::Immediate(3),
-                result_location: 4
+                result_location: Param::Pos(4)
             }
         );
         assert_eq!(
@@ -536,7 +561,7 @@ mod tests {
             Instruction::Multiply {
                 a: Param::Immediate(10),
                 b: Param::Immediate(8),
-                result_location: 7
+                result_location: Param::Pos(7)
             }
         );
         assert_eq!(program.next_instr()?, Instruction::Halt,);

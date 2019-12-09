@@ -29,8 +29,17 @@ fn parse_program(program: &str) -> Result<Vec<i64>> {
 
 async fn part1(input: &str) -> Result<i64> {
     let mut computer = Computer::from_mem(parse_program(input)?);
-    computer.run().await?;
-    Ok(-1)
+    let input = computer.create_input_channel();
+    let output = computer.create_output_channel();
+    input.send(1).await;
+    let task = computer.spawn().await;
+    let mut last_output = 0;
+    while let Some(output) = output.recv().await {
+        println!("{}", output);
+        last_output = output;
+    }
+    task.await?;
+    Ok(last_output)
 }
 
 async fn part2(input: &str) -> Result<i64> {
