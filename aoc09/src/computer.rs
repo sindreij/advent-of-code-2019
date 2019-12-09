@@ -20,15 +20,22 @@ pub struct Computer {
     pc: usize,
     output: Option<Sender<i64>>,
     input: Option<Receiver<i64>>,
+    relative_base: i64,
 }
 
 impl Computer {
-    pub fn from_mem(memory: Vec<i64>) -> Computer {
+    pub fn from_mem(mut memory: Vec<i64>) -> Computer {
+        memory.resize(0x8000, 0);
+        Computer::from_mem_noresize(memory)
+    }
+
+    pub fn from_mem_noresize(memory: Vec<i64>) -> Computer {
         Computer {
             memory,
             pc: 0,
             output: None,
             input: None,
+            relative_base: 0,
         }
     }
 
@@ -78,6 +85,7 @@ impl Computer {
         Ok(match param {
             Param::Pos(pos) => self.get(pos)?,
             Param::Immediate(val) => val,
+            Param::Relative(value) => self.get((self.relative_base + value) as usize)?,
         })
     }
 
@@ -159,6 +167,10 @@ impl Computer {
                     };
                     self.set(result_location, value)?;
                 }
+                AdjustRelativeBase { value } => {
+                    let value = self.get_param(value)?;
+                    self.relative_base += value;
+                }
                 Halt => return Ok(()),
                 // unknown => unimplemented!("{:?}", unknown),
             }
@@ -215,6 +227,9 @@ impl Computer {
                 b: Param::from_mode(modes.get(1).copied().unwrap_or(0), self.next_i64()?)?,
                 result_location: self.next_i64()? as usize,
             },
+            9 => Instruction::AdjustRelativeBase {
+                value: Param::from_mode(modes.get(0).copied().unwrap_or(0), self.next_i64()?)?,
+            },
             99 => Instruction::Halt,
             unknown => Err(anyhow!("Unknown instruction {}", unknown))?,
         })
@@ -225,6 +240,7 @@ impl Computer {
 enum Param {
     Pos(usize),
     Immediate(i64),
+    Relative(i64),
 }
 
 impl Param {
@@ -232,6 +248,7 @@ impl Param {
         Ok(match mode {
             0 => Param::Pos(value as usize),
             1 => Param::Immediate(value),
+            2 => Param::Relative(value),
             mode => Err(anyhow!("Unknown mode {}", mode))?,
         })
     }
@@ -273,6 +290,9 @@ enum Instruction {
         b: Param,
         result_location: usize,
     },
+    AdjustRelativeBase {
+        value: Param,
+    },
     Halt,
 }
 
@@ -304,6 +324,7 @@ impl Display for Instruction {
                 b,
                 result_location,
             } => write!(f, "IF {} == {} => {}", a, b, result_location),
+            AdjustRelativeBase { value } => write!(f, "REL_BASE += {}", value),
             Halt => write!(f, "HALT"),
         }
     }
@@ -315,6 +336,7 @@ impl Display for Param {
         match self {
             Pos(value) => write!(f, "&{}", value),
             Immediate(value) => write!(f, "{}", value),
+            Relative(value) => write!(f, "base + {}", value),
         }
     }
 }
@@ -322,6 +344,69 @@ impl Display for Param {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn input_output(program: &[i64], input: i64) -> Result<i64> {
+        task::block_on(async {
+            let mut computer = Computer::from_mem(program.to_vec());
+            let output_ch = computer.create_output_channel();
+            let input_ch = computer.create_input_channel();
+            input_ch.send(input).await;
+            computer.run().await?;
+            Ok(output_ch.recv().await.ok_or(anyhow!("No output"))?)
+        })
+    }
+
+    fn get_output(program: Vec<i64>) -> Result<i64> {
+        task::block_on(async {
+            let mut computer = Computer::from_mem(program);
+            let output = computer.create_output_channel();
+            computer.run().await?;
+            Ok(output.recv().await.ok_or(anyhow!("No output"))?)
+        })
+    }
+
+    fn get_all_output(program: Vec<i64>) -> Result<Vec<i64>> {
+        task::block_on(async {
+            let mut computer = Computer::from_mem(program);
+            let output = computer.create_output_channel();
+            let computer_task = computer.spawn().await;
+            let mut result = Vec::new();
+            while let Some(value) = output.recv().await {
+                result.push(value);
+            }
+            computer_task.await?;
+            // Ok(output.recv().await.ok_or(anyhow!("No output"))?)
+            Ok(result)
+        })
+    }
+
+    #[test]
+    fn day9_part1() -> Result<()> {
+        assert_eq!(
+            get_all_output(vec![
+                109, 1, 204, -1, 1001, 100, 1, 100, 1008, 100, 16, 101, 1006, 101, 0, 99
+            ])?,
+            vec![109, 1, 204, -1, 1001, 100, 1, 100, 1008, 100, 16, 101, 1006, 101, 0, 99]
+        );
+        assert_eq!(
+            get_output(vec![1102, 34915192, 34915192, 7, 4, 7, 99, 0])?,
+            1219070632396864
+        );
+        assert_eq!(
+            get_output(vec![104, 1125899906842624, 99])?,
+            1125899906842624
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_relative_mode() -> Result<()> {
+        assert_eq!(get_output(vec![109, 1, 204, -1, 99])?, 109);
+
+        Ok(())
+    }
+
     #[test]
     fn new_state_output() -> Result<()> {
         let program = vec![3, 0, 4, 0, 99];
@@ -507,7 +592,7 @@ mod tests {
     }
 
     fn finish(program: Vec<i64>) -> Result<Vec<i64>> {
-        let mut computer = Computer::from_mem(program);
+        let mut computer = Computer::from_mem_noresize(program);
         task::block_on(computer.run())?;
         Ok(computer.memory)
     }
@@ -529,26 +614,6 @@ mod tests {
         assert_eq!(finish(vec![1101, 5, 6, 0, 99])?, vec![11, 5, 6, 0, 99]);
         assert_eq!(finish(vec![1102, 4, 2, 3, 99])?, vec![1102, 4, 2, 8, 99]);
         Ok(())
-    }
-
-    fn get_output(program: Vec<i64>) -> Result<i64> {
-        task::block_on(async {
-            let mut computer = Computer::from_mem(program);
-            let output = computer.create_output_channel();
-            computer.run().await?;
-            Ok(output.recv().await.ok_or(anyhow!("No output"))?)
-        })
-    }
-
-    fn input_output(program: &[i64], input: i64) -> Result<i64> {
-        task::block_on(async {
-            let mut computer = Computer::from_mem(program.to_vec());
-            let output_ch = computer.create_output_channel();
-            let input_ch = computer.create_input_channel();
-            input_ch.send(input).await;
-            computer.run().await?;
-            Ok(output_ch.recv().await.ok_or(anyhow!("No output"))?)
-        })
     }
 
     fn print_program(program: &[i64]) {
