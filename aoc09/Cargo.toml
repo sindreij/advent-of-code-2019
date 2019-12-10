@@ -11,3 +11,4 @@ itertools = "0.8.2"
 async-std = {version="1.2.0", features=["unstable", "attributes"]}
 anyhow = "1.0.25"
 futures = "0.3.1"
+intcode = {path="../intcode"}

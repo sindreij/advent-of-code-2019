@@ -1,3 +1,7 @@
+mod computer;
+
+pub use computer::Computer;
+
 #[cfg(test)]
 mod tests {
     #[test]

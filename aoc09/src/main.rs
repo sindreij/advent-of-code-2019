@@ -1,5 +1,3 @@
-mod computer;
-
 use std::io::{self, Read};
 
 use anyhow::{anyhow, Result};
@@ -7,7 +5,7 @@ use async_std::{sync::channel, task};
 use futures::future::join_all;
 use itertools::Itertools;
 
-use computer::Computer;
+use intcode::Computer;
 
 fn main() -> Result<()> {
     let mut input = String::new();
