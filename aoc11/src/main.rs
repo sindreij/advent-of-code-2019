@@ -139,8 +139,13 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn part1(input: &str) -> Result<i32> {
-    Ok(-1)
+async fn part1(input: &str) -> Result<usize> {
+    let mut computer =
+        Computer::from_mem(intcode::parse_program(input)?).with_io(Locomotion::new());
+
+    computer.run().await?;
+
+    Ok(computer.into_io().painted_once())
 }
 
 #[cfg(test)]

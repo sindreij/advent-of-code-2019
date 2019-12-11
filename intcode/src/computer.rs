@@ -97,6 +97,19 @@ impl Computer<ChannelIO> {
 }
 
 impl<IOType: IO> Computer<IOType> {
+    pub fn with_io<NewIO: IO>(self, io: NewIO) -> Computer<NewIO> {
+        Computer {
+            memory: self.memory,
+            pc: self.pc,
+            io,
+            relative_base: self.relative_base,
+        }
+    }
+
+    pub fn into_io(self) -> IOType {
+        self.io
+    }
+
     pub fn debug(&self) {
         let mut debugger = self.clone();
         while let Ok(instr) = debugger.next_instr() {
