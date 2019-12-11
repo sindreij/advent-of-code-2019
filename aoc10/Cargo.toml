@@ -1,5 +1,5 @@
 [package]
-name = "intcode"
+name = "aoc10"
 version = "0.1.0"
 authors = ["Sindre Ilebekk Johansen <sindre@sindrejohansen.no>"]
 edition = "2018"
@@ -8,5 +8,4 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.25"
-async-std = {version="1.2.0", features=["unstable", "attributes"]}
-async-trait = "0.1.21"
+maplit = "1.0.2"

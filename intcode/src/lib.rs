@@ -1,6 +1,6 @@
-mod computer;
+pub mod computer;
 
-pub use computer::Computer;
+pub use computer::{Computer, IO};
 
 #[cfg(test)]
 mod tests {

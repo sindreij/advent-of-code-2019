@@ -58,4 +58,16 @@ async fn part2(input: &str) -> Result<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[async_std::test]
+    async fn test_part1() -> Result<()> {
+        assert_eq!(part1(include_str!("../input/input.txt")).await?, 2932210790);
+
+        Ok(())
+    }
+    #[async_std::test]
+    async fn test_part2() -> Result<()> {
+        assert_eq!(part2(include_str!("../input/input.txt")).await?, 73144);
+        Ok(())
+    }
 }

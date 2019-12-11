@@ -1,10 +1,11 @@
-use std::fmt::{self, Display};
+use std::fmt::{self, Debug, Display};
 
 use anyhow::{anyhow, bail, Result};
 use async_std::{
     sync::{channel, Receiver, Sender},
     task,
 };
+use async_trait::async_trait;
 
 // Opcodes
 // 01 ADD op1 op2 addr
@@ -13,34 +14,73 @@ use async_std::{
 // 04 OUTPUT addr
 // 99 HALT
 
+#[async_trait]
+pub trait IO: Sync + Send + 'static + Debug + Clone {
+    async fn input(&self) -> Result<i64>;
+    async fn output(&mut self, data: i64) -> Result<()>;
+}
+
 #[derive(Debug, Clone)]
-pub struct Computer {
+pub struct ChannelIO {
+    output_ch: Option<Sender<i64>>,
+    input_ch: Option<Receiver<i64>>,
+}
+
+#[async_trait]
+impl IO for ChannelIO {
+    async fn input(&self) -> Result<i64> {
+        match &self.input_ch {
+            None => Err(anyhow!("Tried to read from unconnected input"))?,
+            Some(input) => Ok(input
+                .recv()
+                .await
+                .ok_or(anyhow!("Input sender-end dropped"))?),
+        }
+    }
+
+    async fn output(&mut self, data: i64) -> Result<()> {
+        match &self.output_ch {
+            None => Err(anyhow!("Tried to write to unconnected output"))?,
+            Some(output) => output.send(data).await,
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Computer<IOType = ChannelIO> {
     memory: Vec<i64>,
     // instruction pointer, or program counter
     pc: usize,
-    output: Option<Sender<i64>>,
-    input: Option<Receiver<i64>>,
+    io: IOType,
     relative_base: i64,
 }
 
-impl Computer {
-    pub fn from_mem(mut memory: Vec<i64>) -> Computer {
+impl Computer<ChannelIO> {
+    pub fn from_mem(mut memory: Vec<i64>) -> Computer<ChannelIO> {
         memory.resize(0x8000, 0);
         Computer::from_mem_noresize(memory)
     }
 
-    pub fn from_mem_noresize(memory: Vec<i64>) -> Computer {
+    pub fn from_mem_noresize(memory: Vec<i64>) -> Computer<ChannelIO> {
         Computer {
             memory,
             pc: 0,
-            output: None,
-            input: None,
+            io: ChannelIO {
+                output_ch: None,
+                input_ch: None,
+            },
             relative_base: 0,
         }
     }
 
     pub fn connect_input(&mut self, receiver: Receiver<i64>) {
-        self.input = Some(receiver)
+        self.io.input_ch = Some(receiver)
+    }
+
+    pub fn connect_output(&mut self, sender: Sender<i64>) {
+        self.io.output_ch = Some(sender)
     }
 
     pub fn create_input_channel(&mut self) -> Sender<i64> {
@@ -49,16 +89,14 @@ impl Computer {
         sender
     }
 
-    pub fn connect_output(&mut self, sender: Sender<i64>) {
-        self.output = Some(sender)
-    }
-
     pub fn create_output_channel(&mut self) -> Receiver<i64> {
         let (sender, receiver) = channel(1);
         self.connect_output(sender);
         receiver
     }
+}
 
+impl<IOType: IO> Computer<IOType> {
     pub fn debug(&self) {
         let mut debugger = self.clone();
         while let Ok(instr) = debugger.next_instr() {
@@ -127,20 +165,10 @@ impl Computer {
                 } => {
                     self.set_param(result_location, self.get_param(a)? * self.get_param(b)?)?;
                 }
-                Input { result_location } => match &self.input {
-                    None => Err(anyhow!("Tried to read from unconnected input"))?,
-                    Some(input) => {
-                        let value = input
-                            .recv()
-                            .await
-                            .ok_or(anyhow!("Input sender-end dropped"))?;
-                        self.set_param(result_location, value)?;
-                    }
-                },
-                Output { param } => match &self.output {
-                    None => Err(anyhow!("Tried to write to unconnected output"))?,
-                    Some(output) => output.send(self.get_param(param)?).await,
-                },
+                Input { result_location } => {
+                    self.set_param(result_location, self.io.input().await?)?
+                }
+                Output { param } => self.io.output(self.get_param(param)?).await?,
                 JumpIfTrue { check, jump_to } => {
                     if self.get_param(check)? > 0 {
                         self.pc = self.get_param(jump_to)? as usize;
