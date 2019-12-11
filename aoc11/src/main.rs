@@ -3,6 +3,7 @@ use std::io::{self, prelude::*};
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
+use itertools::Itertools;
 
 use intcode::{self, Computer, IO};
 
@@ -30,6 +31,26 @@ impl Locomotion {
             direction: Direction::Forward,
             next_instruction: LocomotionInstruction::Paint,
         }
+    }
+
+    fn min_max_x(&self) -> (i32, i32) {
+        self.pixels
+            .keys()
+            .map(|(x, _)| x)
+            .copied()
+            .minmax()
+            .into_option()
+            .unwrap()
+    }
+
+    fn min_max_y(&self) -> (i32, i32) {
+        self.pixels
+            .keys()
+            .map(|(_, y)| y)
+            .copied()
+            .minmax()
+            .into_option()
+            .unwrap()
     }
 
     fn painted_once(&self) -> usize {
@@ -135,6 +156,7 @@ async fn main() -> Result<()> {
     io::stdin().read_to_string(&mut input)?;
 
     println!("Part1: {}", part1(&input).await?);
+    part2(&input).await?;
 
     Ok(())
 }
@@ -146,6 +168,33 @@ async fn part1(input: &str) -> Result<usize> {
     computer.run().await?;
 
     Ok(computer.into_io().painted_once())
+}
+
+async fn part2(input: &str) -> Result<()> {
+    let mut locomotion = Locomotion::new();
+    locomotion.paint(Color::White);
+
+    let mut computer = Computer::from_mem(intcode::parse_program(input)?).with_io(locomotion);
+
+    computer.run().await?;
+
+    let painting = computer.into_io();
+
+    let (min_x, max_x) = painting.min_max_x();
+    let (min_y, max_y) = painting.min_max_y();
+
+    for y in min_y..=max_y {
+        for x in min_x..=max_x {
+            let letter = match painting.get(x, y) {
+                Color::Black => ' ',
+                Color::White => '█',
+            };
+            print!("{}", letter);
+        }
+        print!("\n");
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
