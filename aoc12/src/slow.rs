@@ -23,15 +23,6 @@ pub fn step(moons: &[Moon]) -> Vec<Moon> {
     moons.iter().map(|moon| step_one(moon, moons)).collect()
 }
 
-fn unit_one(a: i32, b: i32) -> i32 {
-    use std::cmp::Ordering::*;
-    match a.cmp(&b) {
-        Less => -1,
-        Equal => 0,
-        Greater => 1,
-    }
-}
-
 fn step_one(moon: &Moon, moons: &[Moon]) -> Moon {
     let mut moon = moon.clone();
     for second in moons {
@@ -52,25 +43,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse() {
-        let input = "<x=-1, y=0, z=2>\n<x=2, y=-10, z=-7>\n";
-        let output = parse_input(input);
-        assert_eq!(output[0].pos, Ptr { x: -1, y: 0, z: 2 });
-        assert_eq!(
-            output[1].pos,
-            Ptr {
-                x: 2,
-                y: -10,
-                z: -7
-            }
-        );
-    }
-
-    #[test]
-    fn test_parse_2() {
-        let input = include_str!("../input/test_input.txt");
-        let output = parse_input(input);
-        assert_eq!(output[0].pos, Ptr { x: -1, y: 0, z: 2 });
+    fn test_equalibrium() -> Result<()> {
+        let input = parse_input(include_str!("../input/test_input.txt"));
+        assert_eq!(calculate_equalibrium(&input)?, 2772);
+        Ok(())
     }
 
     #[test]

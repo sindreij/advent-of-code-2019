@@ -1,3 +1,4 @@
+mod fast;
 mod slow;
 mod utils;
 
@@ -31,5 +32,5 @@ fn part1(input: &str) -> Result<i32> {
 
 fn part2(input: &str) -> Result<i64> {
     let moons = parse_input(input);
-    slow::calculate_equalibrium(&moons)
+    fast::calculate_equalibrium(&moons)
 }
