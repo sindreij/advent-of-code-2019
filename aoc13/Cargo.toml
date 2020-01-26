@@ -9,4 +9,9 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.25"
 intcode = {path="../intcode"}
-async-std = "1.3.0"
+async-std = {version="1.3.0", features=["unstable"]}
+winit = "0.20.0-alpha5"
+pixels = "0.0.2"
+env_logger = "0.7.1"
+winit_input_helper = "0.4.0-alpha4"
+async-trait = "0.1.21"

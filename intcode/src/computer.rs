@@ -148,7 +148,7 @@ impl<IOType: IO> Computer<IOType> {
         })
     }
 
-    pub async fn spawn(mut self) -> task::JoinHandle<Result<()>> {
+    pub fn spawn(mut self) -> task::JoinHandle<Result<()>> {
         task::spawn(async move {
             let result = self.run().await;
             if let Err(err) = &result {
